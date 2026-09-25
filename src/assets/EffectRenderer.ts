@@ -1,11 +1,12 @@
 import { GameState, Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../engine/Collision';
+import { GRID_CELL_SIZE, GRID_OFFSET } from '../utils/Collision';
 
 // 金币飘字动画时长（ms）：上浮 + 渐隐的总时长（引擎时钟计时）
 const GOLD_TEXT_DURATION = 900;
 
-// 视觉特效绘制（子弹/命中冲击/金币飘字/画面暗角）：只读 GameState 与引擎时钟，不回写游戏状态；
-// 金币飘字队列与其基准金价作为实例状态持有，随实例生命周期演进（Renderer 构造时创建一次）
+// 视觉特效绘制（金币飘字/画面暗角）：只读 GameState 与引擎时钟，不回写游戏状态；
+// 金币飘字队列与其基准金价作为实例状态持有，随实例生命周期演进（Renderer 构造时创建一次）；
+// 子弹与命中特效绘制随炮塔渲染独立成 TurretRenderer（assets）
 export class EffectRenderer {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
@@ -19,79 +20,6 @@ export class EffectRenderer {
   constructor(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
     this.ctx = ctx;
     this.canvas = canvas;
-  }
-
-  // 子弹：绿色能量弹，带朝飞行方向的渐隐拖尾（now 为引擎游戏时钟）
-  public drawProjectiles(state: GameState, now: number) {
-    state.projectiles.forEach(proj => {
-        const t = Math.min(1, (now - proj.startTime) / proj.duration);
-        const fx = this.gridOffset.x + proj.from.x * this.cellSize + this.cellSize / 2;
-        const fy = this.gridOffset.y + proj.from.y * this.cellSize + this.cellSize / 2;
-        const tx = this.gridOffset.x + proj.to.x * this.cellSize + this.cellSize / 2;
-        const ty = this.gridOffset.y + proj.to.y * this.cellSize + this.cellSize / 2;
-        const x = fx + (tx - fx) * t;
-        const y = fy + (ty - fy) * t;
-
-        // 飞行方向单位向量（用于拖尾朝向）
-        const dirLen = Math.hypot(tx - fx, ty - fy) || 1;
-        const ux = (tx - fx) / dirLen;
-        const uy = (ty - fy) / dirLen;
-
-        this.ctx.save();
-
-        // 拖尾：沿飞行反方向的渐隐短尾
-        const tail = 16;
-        const grad = this.ctx.createLinearGradient(x - ux * tail, y - uy * tail, x, y);
-        grad.addColorStop(0, 'rgba(46, 204, 113, 0)');
-        grad.addColorStop(1, 'rgba(46, 204, 113, 0.85)');
-        this.ctx.strokeStyle = grad;
-        this.ctx.lineWidth = 4;
-        this.ctx.lineCap = 'round';
-        this.ctx.beginPath();
-        this.ctx.moveTo(x - ux * tail, y - uy * tail);
-        this.ctx.lineTo(x, y);
-        this.ctx.stroke();
-
-        // 弹头：带光晕的发光核心
-        this.ctx.shadowColor = '#aaffcc';
-        this.ctx.shadowBlur = 10;
-        this.ctx.fillStyle = '#eafff3';
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        this.ctx.restore();
-    });
-  }
-
-  // 命中特效：扩散冲击环 + 中心闪光，整体随时间渐隐（now 为引擎游戏时钟）
-  public drawHitEffects(state: GameState, now: number) {
-    state.hitEffects.forEach(eff => {
-        const t = Math.min(1, (now - eff.startTime) / eff.duration);
-        const px = this.gridOffset.x + eff.position.x * this.cellSize + this.cellSize / 2;
-        const py = this.gridOffset.y + eff.position.y * this.cellSize + this.cellSize / 2;
-        const alpha = 1 - t;
-
-        this.ctx.save();
-
-        // 扩散冲击环
-        this.ctx.strokeStyle = `rgba(46, 204, 113, ${alpha * 0.9})`;
-        this.ctx.lineWidth = 3 * alpha + 1;
-        this.ctx.beginPath();
-        this.ctx.arc(px, py, 5 + t * 20, 0, Math.PI * 2);
-        this.ctx.stroke();
-
-        // 中心闪光渐隐
-        const flash = this.ctx.createRadialGradient(px, py, 0, px, py, 14);
-        flash.addColorStop(0, `rgba(234, 255, 243, ${alpha})`);
-        flash.addColorStop(1, 'rgba(234, 255, 243, 0)');
-        this.ctx.fillStyle = flash;
-        this.ctx.beginPath();
-        this.ctx.arc(px, py, 14, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        this.ctx.restore();
-    });
   }
 
   // 金币飘字：逐帧对比 player.gold 增量，金币入账（睡觉产出）时在玩家当前位置

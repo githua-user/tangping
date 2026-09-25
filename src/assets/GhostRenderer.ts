@@ -1,16 +1,28 @@
-import { GameState, Position, GHOST_SPAWN_DURATION } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../engine/Collision';
+import { GameState, Position, GHOST_DOOR_BURST_DURATION, GHOST_SPAWN_DURATION } from '../types';
+import { GHOST_ENTRANCE_DOOR, GRID_CELL_SIZE, GRID_OFFSET, WALL_BODY_WIDTH } from '../utils/Collision';
 // hash01：确定性哈希（FloorRenderer 导出），啃门木屑定位共用
 import { hash01 } from './FloorRenderer';
-// roundRect 路径工具；并注入 SpawnRenderer 以借用门几何与啃门判定
-import { roundRect, SpawnRenderer, DoorGeometry } from './SpawnRenderer';
+// roundRect 路径工具；并注入 SpawnRenderer 以借用门几何、啃门判定与门框/门面画法
+import { roundRect, SpawnRenderer, DoorGeometry, DOOR_TIERS, DOOR_PANEL_HEIGHT, DOOR_SLAB_SIDE, DOOR_FACE_HEIGHT, DOOR_FRAME_POST_W } from './SpawnRenderer';
 
 // 前扑幅度（px）：出手时整个身体向上扑向门板，影子留在地面
 const GHOST_ATTACK_LUNGE = 9;
 
-// 角色绘制（玩家与幽灵）：只读 GameState 与引擎时钟，不回写游戏状态；
-// 幽灵啃门的动作与落点特效依赖 SpawnRenderer 的门几何与站位判定（构造时注入同一实例）
-export class CharacterRenderer {
+// ── 左下角幽灵入场门（像素几何）────────────────────────────────────────
+// 位置由 GHOST_ENTRANCE_DOOR（世界格坐标）换算：门洞中线即该格中心，墙线在它的 y 上。
+// 门框/门板/门槛全部复用房门那套画法（同一副门柱与木质门面），只是没有等级与血条 ——
+// 它不参与建造升级，是幽灵的出入口
+const ENTRANCE_DOOR_CX = GRID_OFFSET.x + GHOST_ENTRANCE_DOOR.x * GRID_CELL_SIZE;
+const ENTRANCE_DOOR_WALL_Y = GRID_OFFSET.y + GHOST_ENTRANCE_DOOR.y * GRID_CELL_SIZE;
+const ENTRANCE_DOOR_HALF = 27; // 门洞半宽：与房门门板同量级（房门 baseHalf 约 27）
+const ENTRANCE_DOOR_STUB_H = WALL_BODY_WIDTH + 10; // 两侧残墙高度：只剩半截，明显低于门洞顶
+const ENTRANCE_DOOR_STUB_LEN = 96; // 右侧残墙长度：门前一段就断开（左段一直铺到画布左缘）
+// 门被撞开后停在门柱旁：门板绕铰链横向压扁到只剩一条边，近似侧对镜头
+const ENTRANCE_DOOR_OPEN_SCALE = 0.14;
+
+// 幽灵绘制（含左下角入场门：潜伏期红光 / 破门动画 / 回血期门洞光）：只读 GameState 与引擎时钟，不回写游戏状态；
+// 啃门的动作与落点特效依赖 SpawnRenderer 的门几何与站位判定（构造时注入同一实例）
+export class GhostRenderer {
   private ctx: CanvasRenderingContext2D;
   private spawn: SpawnRenderer; // 门几何/啃门判定的来源（与 Renderer 共享同一实例）
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
@@ -21,223 +33,250 @@ export class CharacterRenderer {
     this.spawn = spawn;
   }
 
-  // nowMs：引擎游戏时钟（GameLogic.getClockMs），呼吸起伏/眨眼/睡觉 Zzz 与全局时钟同源，暂停时同步冻结
-  public drawPlayer(state: GameState, nowMs: number) {
-    // 睡觉时躺到正在睡觉的那张床上
-    const sleepingBed = state.beds.find((bed) => bed.isSleeping);
+  // 入场门几何：与房门共用 DoorGeometry 结构，只是门洞不在房间轮廓上，位置由 GHOST_ENTRANCE_DOOR 常量给出
+  private entranceDoorGeometry(): DoorGeometry {
+    const cx = ENTRANCE_DOOR_CX;
+    const wallY = ENTRANCE_DOOR_WALL_Y;
+    const baseY = wallY + WALL_BODY_WIDTH / 2;
+    const baseHalf = ENTRANCE_DOOR_HALF;
+    const faceHalf = baseHalf - DOOR_SLAB_SIDE;
+    return {
+      cx,
+      wallY,
+      baseY,
+      baseHalf,
+      faceHalf,
+      topHalf: faceHalf,
+      point: (u, v) => ({ x: cx + u * faceHalf, y: baseY - DOOR_FACE_HEIGHT * v }),
+    };
+  }
+
+  // 左下角入场门：玩家第一次上床前就立在走廊尽头，等着被撞开 ——
+  // 潜伏期门缝透红光（按心跳脉动）、破门瞬间门板甩开并推出冲击环、回血期门洞里换成青绿色治疗光
+  public drawGhostEntranceDoor(state: GameState, nowMs: number) {
+    const g = this.entranceDoorGeometry();
+    const ghost = state.ghost;
+    const dormant = ghost.state === 'DORMANT';
+    const sinceSpawn = nowMs - ghost.spawnTime;
+    // 破门进度：0 = 门还关着，1 = 门板已甩到开完；尚未出场（spawnTime < 0）时恒为 0
+    const raw = ghost.spawnTime < 0 ? 0 : Math.min(1, Math.max(0, sinceSpawn / GHOST_DOOR_BURST_DURATION));
+    const open = raw * raw * (3 - 2 * raw); // smoothstep：起手最快、末段收住，像被撞开后顶到墙
+
+    // 门洞暗面：门后是地图之外的黑，门板打开多少就露出多少
+    const holeTop = g.baseY - DOOR_PANEL_HEIGHT;
+    const hole = this.ctx.createLinearGradient(0, g.baseY, 0, holeTop);
+    hole.addColorStop(0, '#05050a');
+    hole.addColorStop(1, '#13131f');
+    this.ctx.save();
+    this.ctx.fillStyle = hole;
+    this.ctx.fillRect(g.cx - g.baseHalf, holeTop, g.baseHalf * 2, DOOR_PANEL_HEIGHT);
+    this.drawEntranceWallStubs(g);
+    // 门框：与房门同一套画法（1 级门框配色，配一块木质门板）
+    this.spawn.drawDoorFrame(g, 1);
+
+    // 门板：关着 → 破门瞬间绕左门柱横向压扁（近似侧对镜头），停下后不再合上
+    const hingeX = g.cx - g.baseHalf;
+    const panelScale = 1 - (1 - ENTRANCE_DOOR_OPEN_SCALE) * open;
+    this.ctx.save();
+    this.ctx.translate(hingeX, 0);
+    this.ctx.scale(panelScale, 1);
+    this.ctx.translate(-hingeX, 0);
+    this.spawn.drawDoorPanelBody(g, DOOR_TIERS.wood, false);
+    this.spawn.drawWoodFace(g, DOOR_TIERS.wood);
+    this.drawEntranceDoorClawMarks(g, 1 - open); // 门开得越大，门板上的爪痕越淡
+    this.ctx.restore();
+    this.ctx.restore();
+
+    // 门缝/门洞里透出的红光：潜伏期按心跳节奏脉动（门后有东西在等），破门瞬间暴涨，出场后缓降到余辉
+    const pulse = 0.5 + 0.5 * Math.sin(nowMs / 300);
+    const afterglow = ghost.spawnTime < 0 ? 1 : Math.max(0, 1 - sinceSpawn / (GHOST_SPAWN_DURATION * 3));
+    const healGlow = ghost.state === 'HEALING';
+    this.drawEntranceLeak(g, dormant ? 0.3 + 0.3 * pulse : healGlow ? 0.1 : 0.14 + 0.5 * afterglow, open);
+
+    // 幽灵缩在门洞里回血：门洞里那圈红光换成青绿色的治疗光，门楣上挂一行"回血中" ——
+    // 这段时间打不着它，玩家该做的是攒钱升级，而不是对着门洞浪费火力
+    if (healGlow) this.drawEntranceHealGlow(g, nowMs);
+
+    // 破门瞬间的冲击环与门洞里涌出的红光：只在出场动画期间播
+    if (ghost.spawnTime >= 0 && sinceSpawn < GHOST_SPAWN_DURATION) {
+      this.drawEntranceBurst(g, sinceSpawn);
+    }
+  }
+
+  // 回血期的门洞光：一圈青绿色的柔光（与幽灵身上失血的青绿光晕同色系）+ 门楣上的「回血中」标签，
+  // 随心跳缓慢明暗，和潜伏期那道红色门缝光区分开
+  private drawEntranceHealGlow(g: DoorGeometry, nowMs: number) {
+    const pulse = 0.5 + 0.5 * Math.sin(nowMs / 260);
+    const cy = g.baseY - DOOR_PANEL_HEIGHT * 0.45;
+    const radius = 72 + 12 * pulse;
 
     this.ctx.save();
+    const glow = this.ctx.createRadialGradient(g.cx, cy, 4, g.cx, cy, radius);
+    glow.addColorStop(0, `rgba(90, 255, 210, ${0.32 + 0.12 * pulse})`);
+    glow.addColorStop(0.55, `rgba(42, 208, 168, ${0.15 + 0.06 * pulse})`);
+    glow.addColorStop(1, 'rgba(42, 208, 168, 0)');
+    this.ctx.fillStyle = glow;
+    this.ctx.fillRect(g.cx - radius, cy - radius, radius * 2, radius * 2);
 
-    if (sleepingBed) {
-        const bedX = this.gridOffset.x + sleepingBed.position.x * this.cellSize + this.cellSize / 2;
-        const bedY = this.gridOffset.y + sleepingBed.position.y * this.cellSize + this.cellSize / 2;
-        // 熟睡呼吸：被面随引擎时钟轻微起伏
-        const breath = Math.sin((nowMs / 1000) * 1.8) * 0.5;
-
-        // 被子：暖红布面纵向渐变（受光在上），圆角方被盖住身体
-        const quilt = this.ctx.createLinearGradient(bedX, bedY - 5, bedX, bedY + 17);
-        quilt.addColorStop(0, '#ff7a63');
-        quilt.addColorStop(0.5, '#e74c3c');
-        quilt.addColorStop(1, '#a93226');
-        this.ctx.fillStyle = quilt;
-        roundRect(this.ctx, bedX - 18, bedY - 5, 36, 22, 4);
-        this.ctx.fill();
-
-        // 被面折痕：两道随呼吸轻晃的弧线
-        this.ctx.strokeStyle = 'rgba(70, 8, 4, 0.4)';
-        this.ctx.lineWidth = 1.2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(bedX - 12, bedY + 3 + breath);
-        this.ctx.quadraticCurveTo(bedX, bedY + 5.5 + breath, bedX + 12, bedY + 3 + breath);
-        this.ctx.moveTo(bedX - 8.5, bedY + 10.5 - breath);
-        this.ctx.quadraticCurveTo(bedX, bedY + 13 - breath, bedX + 8.5, bedY + 10.5 - breath);
-        this.ctx.stroke();
-
-        // 被沿高光：上缘一道柔亮窄边，像被面翻边
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        roundRect(this.ctx, bedX - 15, bedY - 4, 30, 3, 1.5);
-        this.ctx.fill();
-
-        // 头（枕头上）：闭眼熟睡
-        this.drawPlayerHead(bedX, bedY - 13, true, nowMs);
-
-        // 睡觉浮起的 Zzz：一大一小两颗字母，随引擎时钟交替漂浮并明暗呼吸（暂停时冻结）
-        const zPhase = Math.sin(nowMs / 500);
-        this.ctx.globalAlpha = 0.6 + 0.4 * (zPhase * 0.5 + 0.5);
-        this.ctx.fillStyle = '#e8f0ff';
-        this.ctx.font = 'bold 14px Arial';
-        this.ctx.textAlign = 'left';
-        this.ctx.fillText('Z', bedX + 14, bedY - 20 + zPhase * 5);
-        this.ctx.font = 'bold 10px Arial';
-        this.ctx.fillText('z', bedX + 21, bedY - 26 + zPhase * 3.5);
-        this.ctx.globalAlpha = 1;
-    } else {
-        // 站立/移动的小人：跟随玩家位置
-        const { x, y } = state.player.position;
-        const px = this.gridOffset.x + x * this.cellSize + this.cellSize / 2;
-        const py = this.gridOffset.y + y * this.cellSize + this.cellSize / 2;
-        // 呼吸起伏：腿以上的部位随引擎时钟轻微上下浮动
-        const breath = Math.sin((nowMs / 1000) * 2.4) * 1.2;
-
-        // 影子：径向渐变的柔和落地影
-        const shadow = this.ctx.createRadialGradient(px, py + 22, 2, px, py + 22, 15);
-        shadow.addColorStop(0, 'rgba(0, 0, 0, 0.42)');
-        shadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        this.ctx.fillStyle = shadow;
-        this.ctx.beginPath();
-        this.ctx.ellipse(px, py + 22, 15, 5, 0, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // 双腿：深色裤管，两脚略微分开
-        this.ctx.fillStyle = '#4a3524';
-        roundRect(this.ctx, px - 6.5, py + 12, 5.5, 9, 2.5);
-        this.ctx.fill();
-        roundRect(this.ctx, px + 1, py + 12, 5.5, 9, 2.5);
-        this.ctx.fill();
-
-        // 上身与头随呼吸整体起伏
-        this.ctx.save();
-        this.ctx.translate(0, breath);
-
-        // 双臂：袖管垂在身体两侧，末端露出小手
-        this.ctx.fillStyle = '#c9661a';
-        roundRect(this.ctx, px - 11.5, py - 1, 5, 12, 2.5);
-        this.ctx.fill();
-        roundRect(this.ctx, px + 6.5, py - 1, 5, 12, 2.5);
-        this.ctx.fill();
-        this.ctx.fillStyle = '#eec06a';
-        this.ctx.beginPath();
-        this.ctx.arc(px - 9, py + 10, 2, 0, Math.PI * 2);
-        this.ctx.arc(px + 9, py + 10, 2, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // 躯干：橙色卫衣，纵向渐变 + 下摆压暗 + 拉链与肩部高光
-        const hoodie = this.ctx.createLinearGradient(px, py - 4, px, py + 14);
-        hoodie.addColorStop(0, '#f59033');
-        hoodie.addColorStop(0.55, '#e67e22');
-        hoodie.addColorStop(1, '#b85c0f');
-        this.ctx.fillStyle = hoodie;
-        roundRect(this.ctx, px - 8.5, py - 4, 17, 16, 5.5);
-        this.ctx.fill();
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
-        roundRect(this.ctx, px - 8.5, py + 8, 17, 4, 2);
-        this.ctx.fill();
-        this.ctx.strokeStyle = 'rgba(90, 45, 5, 0.5)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(px, py - 2.5);
-        this.ctx.lineTo(px, py + 8);
-        this.ctx.stroke();
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-        roundRect(this.ctx, px - 6.5, py - 2.5, 3.5, 8, 1.75);
-        this.ctx.fill();
-
-        // 头：睁眼状态，内部按引擎时钟周期眨眼
-        this.drawPlayerHead(px, py - 12, false, nowMs);
-
-        this.ctx.restore();
-    }
-
+    this.ctx.textAlign = 'center';
+    this.ctx.font = 'bold 12px Arial';
+    this.ctx.lineWidth = 3;
+    this.ctx.strokeStyle = 'rgba(6, 48, 38, 0.85)';
+    this.ctx.fillStyle = '#c8fff0';
+    this.ctx.strokeText('回血中', g.cx, g.baseY - DOOR_PANEL_HEIGHT - 8);
+    this.ctx.fillText('回血中', g.cx, g.baseY - DOOR_PANEL_HEIGHT - 8);
     this.ctx.restore();
   }
 
-  // 玩家头部：暖肤径向渐变 + 深棕短发 + 五官；eyesClosed 为睡眠态闭眼，否则按引擎时钟周期眨眼；
-  // cx/cy 为头部圆心，由站立/躺床两种姿态共用
-  private drawPlayerHead(cx: number, cy: number, eyesClosed: boolean, nowMs: number) {
-    // 颈部阴影：头与衣领/枕头衔接处的暗部
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-    this.ctx.beginPath();
-    this.ctx.ellipse(cx, cy + 8, 5, 2.5, 0, 0, Math.PI * 2);
-    this.ctx.fill();
+  // 门洞两侧的残墙：一段低矮的砌体（砌体面 + 参差的崩塌断口 + 墙头受光亮线 + 墙脚暗边），
+  // 让门洞看起来是长在墙上而不是凭空立在走廊里；左段一直铺到画布左缘，右段在门前一段就断开
+  private drawEntranceWallStubs(g: DoorGeometry) {
+    const bandY = g.wallY + WALL_BODY_WIDTH / 2; // 墙脚：与门板底边、门槛齐平
+    const leftTo = g.cx - g.baseHalf - DOOR_FRAME_POST_W;
+    const rightFrom = g.cx + g.baseHalf + DOOR_FRAME_POST_W;
+    const rightEnd = rightFrom + ENTRANCE_DOOR_STUB_LEN;
+    const segments: Array<[number, number, number]> = [
+      [-8, leftTo, 311], // 左段：起点取在画布外，残墙看起来一直延伸出去
+      [rightFrom, rightEnd, 353],
+    ];
 
-    // 脸部：左上受光的暖肤径向渐变（光源与场景顶光一致）
-    const skin = this.ctx.createRadialGradient(cx - 3, cy - 3.5, 1.5, cx, cy, 9.5);
-    skin.addColorStop(0, '#ffe9c0');
-    skin.addColorStop(0.6, '#f7cd7a');
-    skin.addColorStop(1, '#d9a13f');
-    this.ctx.fillStyle = skin;
-    this.ctx.beginPath();
-    this.ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-    this.ctx.fill();
+    segments.forEach(([x0, x1, seed]) => {
+      // 崩塌断口：顶边按固定间距逐段取哈希起伏，像被砸剩下的墙头（逐帧稳定不闪）
+      const step = 13;
+      const top: Position[] = [];
+      for (let x = x0; x <= x1 + 0.001; x += step) {
+        const px = Math.min(x, x1);
+        top.push({ x: px, y: bandY - ENTRANCE_DOOR_STUB_H + hash01(seed + Math.round(px / step), 7) * 7 });
+      }
 
-    // 耳朵：两侧各一枚圆耳
-    this.ctx.fillStyle = '#eec06a';
-    this.ctx.beginPath();
-    this.ctx.arc(cx - 8.6, cy + 0.5, 2, 0, Math.PI * 2);
-    this.ctx.arc(cx + 8.6, cy + 0.5, 2, 0, Math.PI * 2);
-    this.ctx.fill();
+      // 砌体面：纵向渐变（上亮下暗），与房间墙体同一套光照
+      const face = this.ctx.createLinearGradient(0, bandY - ENTRANCE_DOOR_STUB_H, 0, bandY);
+      face.addColorStop(0, '#3c3c5a');
+      face.addColorStop(0.55, '#2c2c44');
+      face.addColorStop(1, '#1a1a28');
+      this.ctx.beginPath();
+      this.ctx.moveTo(top[0].x, bandY);
+      top.forEach((p) => this.ctx.lineTo(p.x, p.y));
+      this.ctx.lineTo(x1, bandY);
+      this.ctx.closePath();
+      this.ctx.fillStyle = face;
+      this.ctx.fill();
 
-    // 短发：深棕发盖 + 额前锯齿刘海 + 发顶高光
-    const hair = this.ctx.createLinearGradient(cx, cy - 11, cx, cy - 1);
-    hair.addColorStop(0, '#6b4526');
-    hair.addColorStop(1, '#3d2513');
-    this.ctx.fillStyle = hair;
+      // 墙头受光：沿断口勾一道冷色亮线（与全场景左上主光源一致）
+      this.ctx.beginPath();
+      top.forEach((p, i) => (i === 0 ? this.ctx.moveTo(p.x, p.y) : this.ctx.lineTo(p.x, p.y)));
+      this.ctx.lineJoin = 'round';
+      this.ctx.strokeStyle = 'rgba(140, 142, 190, 0.3)';
+      this.ctx.lineWidth = 1.4;
+      this.ctx.stroke();
+
+      // 墙脚暗边：残墙与地面交界处压暗
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      this.ctx.fillRect(x0, bandY - 1.5, x1 - x0, 1.5);
+    });
+
+    // 断口前的碎石：右段尽头散落三块，交代这堵墙是被砸塌的
+    const rubble: Array<[number, number, number]> = [[rightEnd + 9, 3.6, 0], [rightEnd + 19, 2.6, 1], [rightEnd + 6, 2.2, 2]];
+    rubble.forEach(([cx, size, i]) => {
+      const cy = bandY - 1 - (i % 2) * 1.5;
+      this.ctx.fillStyle = i === 1 ? '#4a4a68' : '#3b3b56';
+      this.ctx.beginPath();
+      this.ctx.moveTo(cx - size, cy + size * 0.7);
+      this.ctx.lineTo(cx - size * 0.2, cy - size * 0.6);
+      this.ctx.lineTo(cx + size, cy + size * 0.7);
+      this.ctx.closePath();
+      this.ctx.fill();
+    });
+  }
+
+  // 门缝/门洞里透出的红光：门还基本关着时沿门板四边勾一道细亮红边、门口地面泛红，
+  // 门开了则整片光从门洞漫到走廊上；另有门口一块地面光斑把这一角从暗角里拉出来，
+  // 否则左下角本来就压在画布暗角里，门会黑得看不出形状
+  private drawEntranceLeak(g: DoorGeometry, leak: number, open: number) {
+    const holeTop = g.baseY - DOOR_PANEL_HEIGHT;
+    const cx = g.cx;
+    const cy = g.baseY - 16;
+    const radius = 66 + 54 * open; // 门开得越大，漫出来的红光铺得越开
+
+    this.ctx.save();
+    const glow = this.ctx.createRadialGradient(cx, cy, 3, cx, cy, radius);
+    glow.addColorStop(0, `rgba(255, 96, 72, ${0.5 * leak})`);
+    glow.addColorStop(0.5, `rgba(216, 48, 38, ${0.18 * leak})`);
+    glow.addColorStop(1, 'rgba(216, 48, 38, 0)');
+    this.ctx.fillStyle = glow;
+    this.ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+
+    // 门口地面光斑：横向铺开的暖色椭圆（把渐变圆压扁成贴地的光斑），照亮门前的走廊地面
+    const poolR = 150;
+    const poolCy = g.baseY - 44;
+    this.ctx.save();
+    this.ctx.translate(cx, poolCy);
+    this.ctx.scale(1, 0.42);
+    const pool = this.ctx.createRadialGradient(0, 0, 5, 0, 0, poolR);
+    pool.addColorStop(0, `rgba(255, 138, 96, ${0.2 * leak})`);
+    pool.addColorStop(0.55, `rgba(214, 78, 52, ${0.1 * leak})`);
+    pool.addColorStop(1, 'rgba(214, 78, 52, 0)');
+    this.ctx.fillStyle = pool;
     this.ctx.beginPath();
-    this.ctx.arc(cx, cy - 1.2, 9.2, Math.PI, 0);
-    this.ctx.closePath();
+    this.ctx.arc(0, 0, poolR, 0, Math.PI * 2);
     this.ctx.fill();
+    this.ctx.restore();
+
+    if (open < 0.5) {
+      const seam = (1 - open * 2) * leak;
+      this.ctx.strokeStyle = `rgba(255, 132, 104, ${0.55 * seam})`;
+      this.ctx.lineWidth = 1.4;
+      this.ctx.strokeRect(cx - g.baseHalf + 0.7, holeTop + 0.7, g.baseHalf * 2 - 1.4, DOOR_PANEL_HEIGHT - 1.4);
+    }
+    this.ctx.restore();
+  }
+
+  // 破门：门被撞开的一瞬自门口向外推出一圈贴地冲击环，门洞里同时涌出一团红光，
+  // 两者都随出场进度衰减（与幽灵的钻出动画共用同一时钟）
+  private drawEntranceBurst(g: DoorGeometry, sinceSpawn: number) {
+    const p = Math.min(1, sinceSpawn / GHOST_SPAWN_DURATION);
+    const burstT = Math.min(1, sinceSpawn / GHOST_DOOR_BURST_DURATION);
+
+    this.ctx.save();
+    // 地面冲击环：椭圆贴合地面，向外扩散并淡出
+    const ringR = 24 + burstT * 104;
+    this.ctx.strokeStyle = `rgba(255, 96, 72, ${0.5 * (1 - burstT)})`;
+    this.ctx.lineWidth = 2 + 4 * (1 - burstT);
     this.ctx.beginPath();
-    this.ctx.moveTo(cx - 9.2, cy - 1.2);
-    this.ctx.quadraticCurveTo(cx - 6, cy + 1.6, cx - 3.2, cy - 1.4);
-    this.ctx.quadraticCurveTo(cx - 0.4, cy + 2.2, cx + 2.6, cy - 1.4);
-    this.ctx.quadraticCurveTo(cx + 5.6, cy + 1.8, cx + 9.2, cy - 1.2);
-    this.ctx.lineTo(cx + 9.2, cy - 3.4);
-    this.ctx.lineTo(cx - 9.2, cy - 3.4);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(255, 214, 160, 0.3)';
-    this.ctx.lineWidth = 1.3;
-    this.ctx.beginPath();
-    this.ctx.arc(cx - 1, cy - 2, 6, Math.PI * 1.12, Math.PI * 1.75);
+    this.ctx.ellipse(g.cx, g.baseY - 8, ringR, ringR * 0.4, 0, 0, Math.PI * 2);
     this.ctx.stroke();
 
-    // 眼睛：睡眠（或周期眨眼）时画两道闭眼睫毛弧，否则画眼白 + 瞳孔 + 高光
-    const blinking = !eyesClosed && (nowMs / 1000) % 3.4 < 0.13;
-    if (eyesClosed || blinking) {
-      this.ctx.strokeStyle = '#5a3a1a';
-      this.ctx.lineWidth = 1.6;
-      this.ctx.lineCap = 'round';
-      this.ctx.beginPath();
-      this.ctx.arc(cx - 3.6, cy + 0.2, 2.4, Math.PI * 0.18, Math.PI * 0.82);
-      this.ctx.arc(cx + 3.6, cy + 0.2, 2.4, Math.PI * 0.18, Math.PI * 0.82);
-      this.ctx.stroke();
-    } else {
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.beginPath();
-      this.ctx.ellipse(cx - 3.6, cy + 0.4, 2.6, 2.9, 0, 0, Math.PI * 2);
-      this.ctx.ellipse(cx + 3.6, cy + 0.4, 2.6, 2.9, 0, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.fillStyle = '#3a2410';
-      this.ctx.beginPath();
-      this.ctx.arc(cx - 3.4, cy + 0.6, 1.5, 0, Math.PI * 2);
-      this.ctx.arc(cx + 3.8, cy + 0.6, 1.5, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.beginPath();
-      this.ctx.arc(cx - 3.9, cy - 0.2, 0.6, 0, Math.PI * 2);
-      this.ctx.arc(cx + 3.3, cy - 0.2, 0.6, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
+    // 门洞涌出的红光：出场前半段最亮，随后与幽灵一起淡去
+    const flood = Math.max(0, 1 - p) * 0.5;
+    const rad = 130;
+    const floodGrad = this.ctx.createRadialGradient(g.cx, g.baseY - 12, 4, g.cx, g.baseY - 12, rad);
+    floodGrad.addColorStop(0, `rgba(255, 74, 58, ${flood})`);
+    floodGrad.addColorStop(1, 'rgba(255, 74, 58, 0)');
+    this.ctx.fillStyle = floodGrad;
+    this.ctx.fillRect(g.cx - rad, g.baseY - 12 - rad, rad * 2, rad * 2);
+    this.ctx.restore();
+  }
 
-    // 腮红 + 嘴：睡眠时小圆嘴，清醒时一抹浅笑
-    this.ctx.fillStyle = 'rgba(255, 110, 80, 0.22)';
-    this.ctx.beginPath();
-    this.ctx.ellipse(cx - 5.6, cy + 3.2, 2, 1.3, 0, 0, Math.PI * 2);
-    this.ctx.ellipse(cx + 5.6, cy + 3.2, 2, 1.3, 0, 0, Math.PI * 2);
-    this.ctx.fill();
-    if (eyesClosed) {
-      this.ctx.fillStyle = 'rgba(150, 75, 35, 0.9)';
+  // 门板上被门后的东西刨出的爪痕：三道斜向刮痕，调用方已套好门板变换（会随门板一起被压扁），
+  // 门开得越大越淡 —— 让"门后有东西"这件事在潜伏期就有迹可循
+  private drawEntranceDoorClawMarks(g: DoorGeometry, alpha: number) {
+    this.ctx.save();
+    this.ctx.globalAlpha = Math.max(0, alpha);
+    this.ctx.lineCap = 'round';
+    for (let k = -1; k <= 1; k++) {
+      const a = g.point(-0.34 + k * 0.24, 0.13);
+      const b = g.point(0.2 + k * 0.24, 0.6);
       this.ctx.beginPath();
-      this.ctx.ellipse(cx, cy + 4.6, 1.4, 1.1, 0, 0, Math.PI * 2);
-      this.ctx.fill();
-    } else {
-      this.ctx.strokeStyle = '#a05a28';
-      this.ctx.lineWidth = 1.4;
-      this.ctx.lineCap = 'round';
-      this.ctx.beginPath();
-      this.ctx.arc(cx, cy + 3.4, 2.6, Math.PI * 0.22, Math.PI * 0.78);
+      this.ctx.moveTo(a.x, a.y);
+      this.ctx.quadraticCurveTo((a.x + b.x) / 2 + 4, (a.y + b.y) / 2, b.x, b.y);
+      this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+      this.ctx.lineWidth = 2.4;
+      this.ctx.stroke();
+      this.ctx.strokeStyle = 'rgba(255, 150, 130, 0.28)';
+      this.ctx.lineWidth = 1;
       this.ctx.stroke();
     }
+    this.ctx.restore();
   }
 
   // nowMs：引擎游戏时钟（GameLogic.getClockMs），浮动/尾部波纹/光晕脉冲与全局时钟同源

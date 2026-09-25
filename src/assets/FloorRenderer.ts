@@ -1,5 +1,5 @@
 import { Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_COLS, ROOM_ROWS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, wallLift } from '../engine/Collision';
+import { GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_COLS, ROOM_ROWS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, wallLift } from '../utils/Collision';
 
 // 左房间木地板的三档暖木色：逐块按确定性哈希分配，避免整片地板色调死板重复
 const WOOD_TONES = ['#3c2a1c', '#352417', '#41301f'];

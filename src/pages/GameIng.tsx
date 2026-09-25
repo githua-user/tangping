@@ -6,7 +6,7 @@ import classNames from 'classnames';
 import { Renderer } from '../engine/Renderer';
 import { GameLogic } from '../engine/GameLogic';
 import { BED_LEVELS, BED_MAX_LEVEL, bedUpgradeCost, DOOR_LEVELS, DOOR_MAX_LEVEL, doorUpgradeCost, GameState, TURRET_BUILD_COST, TURRET_LEVELS, TURRET_MAX_LEVEL, turretUpgradeCost } from '../types';
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_ROWS, roomIndexOf } from '../engine/Collision';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_ROWS, roomIndexOf } from '../utils/Collision';
 
 const GameIng: React.FC = () => {
   const navigate = useNavigate();

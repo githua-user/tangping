@@ -147,8 +147,9 @@ const WALL_BANDS: Array<[Position, Position]> = (() => {
 })();
 
 // 玩家可活动边界,GRID_OFFSET是游戏窗口区相对整个画布
+// （导出供幽灵寻路的导航格网复用：网里只保留边界内的节点，走到格网边缘实走时也不会被边界卡住）
 const PLAYER_EDGE_MARGIN = 0.4; // 向内预留一个角色贴边余量
-const PLAYER_BOUNDS = {
+export const PLAYER_BOUNDS = {
   minX: -GRID_OFFSET.x / GRID_CELL_SIZE + PLAYER_EDGE_MARGIN,
   maxX: (CANVAS_WIDTH - GRID_OFFSET.x) / GRID_CELL_SIZE - PLAYER_EDGE_MARGIN,
   minY: -GRID_OFFSET.y / GRID_CELL_SIZE + PLAYER_EDGE_MARGIN,

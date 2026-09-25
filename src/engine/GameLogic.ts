@@ -1,8 +1,22 @@
 import { DOOR_REGEN_RATIO_PER_SEC, GameState, Ghost, GHOST_BASE, GHOST_FLEE_HEALTH_RATIO, GHOST_GROWTH, GHOST_GROWTH_CAP_SECONDS, GHOST_HEAL_RATE_PER_SEC, GHOST_SPAWN_DURATION, Position, Projectile } from '../types';
 import { GHOST_ATTACK_OFFSET_Y, GHOST_ATTACK_SNAP, GHOST_HEAL_POSITION, GHOST_LANE_ALIGN, GHOST_LANE_Y, GHOST_MAX_STEP, GHOST_SPAWN_POSITION, resolveMovement, roomIndexOf } from './Collision';
+import { findPath, hasClearLine, GHOST_CHASE_AIM_NODES, GHOST_CHASE_DRIFT, GHOST_CHASE_GOAL_TOLERANCE, GHOST_CHASE_REPLAN_MS, GHOST_CHASE_WAYPOINT_REACH } from './Pathfinding';
+
+// 门破之后的追击计划（见 GameLogic.updateChase）：只有进入 CHASING 时才会存在
+interface ChasePlan {
+  // 路点（格索引坐标，与幽灵位置同系）；空数组 = 这次没规划出路线，退回直线追击
+  points: Position[];
+  // 正在推进的路点下标
+  cursor: number;
+  // 规划时玩家所在的位置：玩家走开超过阈值就作废重算
+  goal: Position;
+  plannedAt: number; // 规划时刻（引擎时钟 ms）
+}
 
 export class GameLogic {
   private keysPressed: Set<string> = new Set();
+  // 追击计划（门破后 A* 规划的绕墙路线）：与 keysPressed 一样属于引擎侧运行态，不进 GameState
+  private chasePlan: ChasePlan | null = null;
   // 游戏时钟（ms）：update 每帧累加 deltaTime，与移动/啃门共用同一时间基准，且仅 playing 时推进。
   // 炮塔冷却、子弹飞行、命中特效等所有定时逻辑共用此时钟：
   // 不受系统时钟跳变影响，暂停时整体一起冻结，引擎与渲染器写读 startTime 也天然同源
@@ -178,6 +192,9 @@ export class GameLogic {
         ghost.state = 'RETREATING';
     }
 
+    // 寻路计划只服务于追击（CHASING）：转入啃门 / 逃跑 / 回血后即作废，下次追击从零规划
+    if (ghost.state !== 'CHASING') this.chasePlan = null;
+
     // 逃跑返程：分两段 —— 还在房间里（含正对房门的啃门站位）先借本房间门洞退到走廊，
     // 再沿走廊走回入场门、缩进门洞里回血
     if (ghost.state === 'RETREATING') {
@@ -224,13 +241,11 @@ export class GameLogic {
     const targetDoor = this.targetDoorOf(state, ghost);
 
     if (!targetDoor) {
-        // 追击玩家：直奔玩家当前位置（碰到已在上面统一结算）
+        // 追击玩家：门已破，目标变成玩家本人（碰到已在上面统一结算）。
+        // 玩家可能缩在房间深处、跑进另一个房间、贴着墙角和门框绕，直线扑过去会被墙挡下 ——
+        // 改走 A* 规划的绕墙路线（见 updateChase）
         ghost.state = 'CHASING';
-
-        const dx = player.position.x - ghost.position.x;
-        const dy = player.position.y - ghost.position.y;
-        // 位移夹住剩余距离：后期速度高时一帧就跨过玩家，会绕着玩家来回弹却永远碰不到（判定距离 0.4 格）
-        this.stepToward(ghost, dx, dy, moveStep);
+        this.updateChase(state, moveStep);
         return;
     }
 
@@ -250,6 +265,64 @@ export class GameLogic {
             targetDoor.isBroken = true; // 门破后转追击：下一帧起 targetDoorOf 找不到可用门，走 CHASING 分支
         }
     }
+  }
+
+  // 追击（门破之后）：按导航格网 A* 规划一条到玩家的绕墙路线，再沿路线推进。
+  // 玩家可能缩在房间深处、跑进另一个房间、贴着墙角和门框绕 —— 这类走位直线追都会被墙挡下，
+  // 落进 stepGhost 的试探改向里来回蹭，所以这里让幽灵"看着地图"走（路线见 Pathfinding.findPath）。
+  // 规划不逐帧做：玩家走开一段、幽灵偏离路线、或计划过期时才重算
+  private updateChase(state: GameState, moveStep: number) {
+      const ghost = state.ghost;
+      const player = state.player;
+      const plan = this.chasePlan;
+
+      const goalMoved = plan ? Math.hypot(player.position.x - plan.goal.x, player.position.y - plan.goal.y) : 0;
+      const drifted = plan && plan.points.length > 0
+          ? Math.hypot(ghost.position.x - plan.points[plan.cursor].x, ghost.position.y - plan.points[plan.cursor].y)
+          : 0;
+
+      if (!plan || this.clockMs - plan.plannedAt > GHOST_CHASE_REPLAN_MS
+          || goalMoved > GHOST_CHASE_GOAL_TOLERANCE || drifted > GHOST_CHASE_DRIFT) {
+          // 规划失败（起终点附近都没有可站立的节点）时记下一条空路线而不是留空计划：
+          // 否则下一帧又会重跑一次 A*。空路线在 followChasePath 里退回直线追击，等间隔到点再试
+          this.chasePlan = {
+              points: findPath(ghost.position, player.position) ?? [],
+              cursor: 0,
+              goal: { ...player.position },
+              plannedAt: this.clockMs,
+          };
+      }
+
+      this.followChasePath(ghost, player.position, this.chasePlan, moveStep);
+  }
+
+  // 沿规划路线推进一步：先跳过已经贴上的路点，再朝「最远的直线可达路点」走 ——
+  // 把网格折线拉成直线，幽灵不会贴着格网走出一串锯齿；瞄到最后一个路点时改瞄玩家的实时位置
+  // （路线终点只是规划那一刻玩家所在的格，玩家一直在动，照着快照走最后一段会差半步）
+  private followChasePath(ghost: Ghost, playerPos: Position, plan: ChasePlan, moveStep: number) {
+      const points = plan.points;
+      if (points.length === 0) {
+          this.stepToward(ghost, playerPos.x - ghost.position.x, playerPos.y - ghost.position.y, moveStep);
+          return;
+      }
+
+      // 贴到路点就算走过（判定距离与啃门到位的吸附阈值同量级）
+      while (plan.cursor < points.length - 1
+          && Math.hypot(points[plan.cursor].x - ghost.position.x, points[plan.cursor].y - ghost.position.y) <= GHOST_CHASE_WAYPOINT_REACH) {
+          plan.cursor++;
+      }
+
+      // 可见性扫描有上限：格子密（0.25 格一个），向前看这么多已经够拉直，扫到底只会白烧每帧预算
+      let aim = plan.cursor;
+      const lookahead = Math.min(points.length - 1, plan.cursor + GHOST_CHASE_AIM_NODES);
+      for (let i = plan.cursor + 1; i <= lookahead; i++) {
+          if (!hasClearLine(ghost.position, points[i])) break;
+          aim = i;
+      }
+
+      const goal = aim === points.length - 1 ? playerPos : points[aim];
+      // 位移由 stepToward 夹住剩余距离：后期速度高时一帧就跨过路点，否则会在路点两侧每帧弹一次
+      this.stepToward(ghost, goal.x - ghost.position.x, goal.y - ghost.position.y, moveStep);
   }
 
   // 门的自我修复：鬼没在啃这扇门时缓慢回血（啃门中、以及正在走向这扇门的路上都算「在攻击」）。

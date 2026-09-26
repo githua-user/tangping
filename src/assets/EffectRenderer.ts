@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 import { GameState } from '../types';
 import { GRID_CELL_SIZE } from '../utils/Coordinate';
-=======
-import { GameState, Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 
 // 金币飘字动画时长（ms）：上浮 + 渐隐的总时长（引擎时钟计时）
 const GOLD_TEXT_DURATION = 900;

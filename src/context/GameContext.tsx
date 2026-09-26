@@ -1,10 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { GameState, GameAction, Position, BED_LEVELS, DOOR_LEVELS, TURRET_LEVELS, TURRET_BUILD_COST, bedUpgradeCost, doorUpgradeCost, turretUpgradeCost, GHOST_BASE } from '../types';
-<<<<<<< HEAD
 import { GHOST_SPAWN_POSITION, roomIndexOf } from '../utils/Coordinate';
-=======
-import { GHOST_SPAWN_POSITION, roomIndexOf } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 
 const getInitialState = (): GameState => ({
   player: {

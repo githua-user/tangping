@@ -1,9 +1,5 @@
 import { GameState, Position, GHOST_DOOR_BURST_DURATION, GHOST_SPAWN_DURATION } from '../types';
-<<<<<<< HEAD
 import { GHOST_ENTRANCE_DOOR, GRID_CELL_SIZE, WALL_BODY_WIDTH } from '../utils/Coordinate';
-=======
-import { GHOST_ENTRANCE_DOOR, GRID_CELL_SIZE, GRID_OFFSET, WALL_BODY_WIDTH } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 // hash01：确定性哈希（FloorRenderer 导出），啃门木屑定位共用
 import { hash01 } from './FloorRenderer';
 // roundRect 路径工具；并注入 SpawnRenderer 以借用门几何、啃门判定与门框/门面画法
@@ -16,15 +12,9 @@ const GHOST_ATTACK_LUNGE = 9;
 // 位置由 GHOST_ENTRANCE_DOOR（世界格坐标）换算：门洞中线即该格中心，墙线在它的 y 上。
 // 门框/门板/门槛全部复用房门那套画法（同一副门柱与木质门面），只是没有等级与血条 ——
 // 它不参与建造升级，是幽灵的出入口
-<<<<<<< HEAD
 const ENTRANCE_DOOR_CX = GHOST_ENTRANCE_DOOR.x * GRID_CELL_SIZE;
 const ENTRANCE_DOOR_WALL_Y = GHOST_ENTRANCE_DOOR.y * GRID_CELL_SIZE;
 const ENTRANCE_DOOR_HALF = 22; // 门洞半宽：与房门门板同量级（50px 格下房门 baseHalf ≈ 21.5）
-=======
-const ENTRANCE_DOOR_CX = GRID_OFFSET.x + GHOST_ENTRANCE_DOOR.x * GRID_CELL_SIZE;
-const ENTRANCE_DOOR_WALL_Y = GRID_OFFSET.y + GHOST_ENTRANCE_DOOR.y * GRID_CELL_SIZE;
-const ENTRANCE_DOOR_HALF = 27; // 门洞半宽：与房门门板同量级（房门 baseHalf 约 27）
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 const ENTRANCE_DOOR_STUB_H = WALL_BODY_WIDTH + 10; // 两侧残墙高度：只剩半截，明显低于门洞顶
 const ENTRANCE_DOOR_STUB_LEN = 96; // 右侧残墙长度：门前一段就断开（左段一直铺到画布左缘）
 // 门被撞开后停在门柱旁：门板绕铰链横向压扁到只剩一条边，近似侧对镜头

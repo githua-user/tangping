@@ -1,9 +1,5 @@
 import { GameState, Position, Door, BED_MAX_LEVEL, DOOR_MAX_LEVEL } from '../types';
-<<<<<<< HEAD
 import { GHOST_ATTACK_OFFSET_Y, GRID_CELL_SIZE, ROOM_ORIGINS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, WALL_LEAN_FRONT, roomIndexOf } from '../utils/Coordinate';
-=======
-import { GHOST_ATTACK_OFFSET_Y, GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, WALL_LEAN_FRONT, roomIndexOf } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 // hash01：确定性哈希（FloorRenderer 导出），门面木纹/残段锯齿/木屑等扰动共用
 import { hash01 } from './FloorRenderer';
 
@@ -69,10 +65,6 @@ export interface DoorGeometry {
 export class SpawnRenderer {
   private ctx: CanvasRenderingContext2D;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-<<<<<<< HEAD
-=======
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;

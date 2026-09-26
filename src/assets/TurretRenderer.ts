@@ -1,10 +1,6 @@
-<<<<<<< HEAD
 import { GameState, TURRET_MAX_LEVEL, GHOST_SPAWN_DURATION } from '../types';
 import { GRID_CELL_SIZE } from '../utils/Coordinate';
-=======
-import { GameState, Position, TURRET_MAX_LEVEL, GHOST_SPAWN_DURATION } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
+
 // roundRect 路径工具（SpawnRenderer 导出）
 import { roundRect } from './SpawnRenderer';
 
@@ -26,10 +22,6 @@ const TURRET_TIERS = [
 export class TurretRenderer {
   private ctx: CanvasRenderingContext2D;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-<<<<<<< HEAD
-=======
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
   // 炮塔炮头当前角度缓存（按炮塔 id），用于逐帧平滑转向目标
   private turretAngles: Map<string, number> = new Map();
 
@@ -40,13 +32,8 @@ export class TurretRenderer {
   // nowMs：引擎游戏时钟，炮口火光余焰按「当前时钟 - 开火时刻」衰减
   public drawTurrets(state: GameState, nowMs: number) {
     state.turrets.forEach(turret => {
-<<<<<<< HEAD
         const px = turret.position.x * this.cellSize + this.cellSize / 2;
         const py = turret.position.y * this.cellSize + this.cellSize / 2;
-=======
-        const px = this.gridOffset.x + turret.position.x * this.cellSize + this.cellSize / 2;
-        const py = this.gridOffset.y + turret.position.y * this.cellSize + this.cellSize / 2;
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
         // 等级封顶在 TURRET_MAX_LEVEL（炮塔外观 5 档），超出部分统一按最高档绘制
         const level = Math.min(turret.level, TURRET_MAX_LEVEL);
         const t = TURRET_TIERS[level - 1];
@@ -198,17 +185,10 @@ export class TurretRenderer {
   public drawProjectiles(state: GameState, now: number) {
     state.projectiles.forEach(proj => {
         const t = Math.min(1, (now - proj.startTime) / proj.duration);
-<<<<<<< HEAD
         const fx = proj.from.x * this.cellSize + this.cellSize / 2;
         const fy = proj.from.y * this.cellSize + this.cellSize / 2;
         const tx = proj.to.x * this.cellSize + this.cellSize / 2;
         const ty = proj.to.y * this.cellSize + this.cellSize / 2;
-=======
-        const fx = this.gridOffset.x + proj.from.x * this.cellSize + this.cellSize / 2;
-        const fy = this.gridOffset.y + proj.from.y * this.cellSize + this.cellSize / 2;
-        const tx = this.gridOffset.x + proj.to.x * this.cellSize + this.cellSize / 2;
-        const ty = this.gridOffset.y + proj.to.y * this.cellSize + this.cellSize / 2;
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
         const x = fx + (tx - fx) * t;
         const y = fy + (ty - fy) * t;
 
@@ -248,13 +228,8 @@ export class TurretRenderer {
   public drawHitEffects(state: GameState, now: number) {
     state.hitEffects.forEach(eff => {
         const t = Math.min(1, (now - eff.startTime) / eff.duration);
-<<<<<<< HEAD
         const px = eff.position.x * this.cellSize + this.cellSize / 2;
         const py = eff.position.y * this.cellSize + this.cellSize / 2;
-=======
-        const px = this.gridOffset.x + eff.position.x * this.cellSize + this.cellSize / 2;
-        const py = this.gridOffset.y + eff.position.y * this.cellSize + this.cellSize / 2;
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
         const alpha = 1 - t;
 
         this.ctx.save();

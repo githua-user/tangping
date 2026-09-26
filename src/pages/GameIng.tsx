@@ -5,13 +5,9 @@ import { CircleArrowUp, Coins, FastForward, Hammer, LogOut, Pause, Play } from '
 import classNames from 'classnames';
 import { Renderer } from '../engine/Renderer';
 import { GameLogic } from '../engine/GameLogic';
-<<<<<<< HEAD
 import { BED_MAX_LEVEL, bedUpgradeCost, DOOR_MAX_LEVEL, doorUpgradeCost, GameState, TURRET_BUILD_COST, TURRET_MAX_LEVEL, turretUpgradeCost } from '../types';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, GRID_CELL_SIZE, ROOM_ORIGINS, ROOM_ROWS, roomIndexOf } from '../utils/Coordinate';
-=======
-import { BED_LEVELS, BED_MAX_LEVEL, bedUpgradeCost, DOOR_LEVELS, DOOR_MAX_LEVEL, doorUpgradeCost, GameState, TURRET_BUILD_COST, TURRET_LEVELS, TURRET_MAX_LEVEL, turretUpgradeCost } from '../types';
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_ROWS, roomIndexOf } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
+
 
 const GameIng: React.FC = () => {
   const navigate = useNavigate();

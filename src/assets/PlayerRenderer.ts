@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 import { GameState } from '../types';
 import { GRID_CELL_SIZE } from '../utils/Coordinate';
-=======
-import { GameState, Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../utils/Collision';
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 // roundRect 路径工具（SpawnRenderer 导出）
 import { roundRect } from './SpawnRenderer';
 
@@ -12,10 +7,6 @@ import { roundRect } from './SpawnRenderer';
 export class PlayerRenderer {
   private ctx: CanvasRenderingContext2D;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-<<<<<<< HEAD
-=======
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -29,13 +20,8 @@ export class PlayerRenderer {
     this.ctx.save();
 
     if (sleepingBed) {
-<<<<<<< HEAD
         const bedX = sleepingBed.position.x * this.cellSize + this.cellSize / 2;
         const bedY = sleepingBed.position.y * this.cellSize + this.cellSize / 2;
-=======
-        const bedX = this.gridOffset.x + sleepingBed.position.x * this.cellSize + this.cellSize / 2;
-        const bedY = this.gridOffset.y + sleepingBed.position.y * this.cellSize + this.cellSize / 2;
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
         // 熟睡呼吸：被面随引擎时钟轻微起伏
         const breath = Math.sin((nowMs / 1000) * 1.8) * 0.5;
 
@@ -79,13 +65,8 @@ export class PlayerRenderer {
     } else {
         // 站立/移动的小人：跟随玩家位置
         const { x, y } = state.player.position;
-<<<<<<< HEAD
         const px = x * this.cellSize + this.cellSize / 2;
         const py = y * this.cellSize + this.cellSize / 2;
-=======
-        const px = this.gridOffset.x + x * this.cellSize + this.cellSize / 2;
-        const py = this.gridOffset.y + y * this.cellSize + this.cellSize / 2;
->>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
         // 呼吸起伏：腿以上的部位随引擎时钟轻微上下浮动
         const breath = Math.sin((nowMs / 1000) * 2.4) * 1.2;
 

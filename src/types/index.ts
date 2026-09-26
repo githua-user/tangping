@@ -33,7 +33,11 @@ export interface Ghost {
   position: Position;
   attackPower: number;
   speed: number;
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> 9e9f36378af82a85ba22d5f9b837726bae8ade07
   // 锁定的攻击目标门：出场时锁定为玩家床铺所在房间的那扇门。
   targetDoor: string | null;
   // DORMANT：玩家第一次上床睡觉前的潜伏态，藏在左下角入场门后，不移动、不结算任何伤害；

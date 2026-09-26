@@ -1,5 +1,5 @@
-import { GameState, Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET } from '../utils/Collision';
+import { GameState } from '../types';
+import { GRID_CELL_SIZE } from '../utils/Coordinate';
 
 // 金币飘字动画时长（ms）：上浮 + 渐隐的总时长（引擎时钟计时）
 const GOLD_TEXT_DURATION = 900;
@@ -11,7 +11,6 @@ export class EffectRenderer {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
   // 金币飘字队列：纯视觉反馈，逐帧对比金币增量生成，生命周期由引擎时钟推进
   private goldTexts: Array<{ amount: number; x: number; y: number; startTime: number; driftX: number }> = [];
   // 上一帧金币值（null = 尚未建立基准，首帧只记录不生成飘字）
@@ -27,8 +26,8 @@ export class EffectRenderer {
   public updateGoldTexts(state: GameState, nowMs: number) {
     const gold = state.player.gold;
     if (this.lastGold !== null && gold > this.lastGold) {
-      const px = this.gridOffset.x + state.player.position.x * this.cellSize + this.cellSize / 2;
-      const py = this.gridOffset.y + state.player.position.y * this.cellSize + this.cellSize / 2;
+      const px = state.player.position.x * this.cellSize + this.cellSize / 2;
+      const py = state.player.position.y * this.cellSize + this.cellSize / 2;
       this.goldTexts.push({
         amount: gold - this.lastGold,
         x: px + (Math.random() - 0.5) * 16, // 小幅随机偏移，连续产币时飘字不完全重叠

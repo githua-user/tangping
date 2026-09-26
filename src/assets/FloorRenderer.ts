@@ -1,5 +1,5 @@
 import { Position } from '../types';
-import { GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_COLS, ROOM_ROWS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, wallLift } from '../utils/Collision';
+import { GRID_CELL_SIZE, ROOM_ORIGINS, ROOM_COLS, ROOM_ROWS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, wallLift } from '../utils/Coordinate';
 
 // 左房间木地板的三档暖木色：逐块按确定性哈希分配，避免整片地板色调死板重复
 const WOOD_TONES = ['#3c2a1c', '#352417', '#41301f'];
@@ -11,7 +11,7 @@ export function hash01(a: number, b: number): number {
   return s - Math.floor(s);
 }
 
-// 静态场景绘制（地板/墙体/砖缝/污渍/划痕/光斑）：内容只依赖 Collision 常量与画布尺寸、与游戏状态无关，
+// 静态场景绘制（地板/墙体/砖缝/污渍/划痕/光斑）：内容只依赖 Coordinate 常量与画布尺寸、与游戏状态无关，
 // 因此整体离屏预渲染一次（drawFloor 内按主画布尺寸失效重建），之后每帧仅贴图复用；
 // 构建缓存时新建一个绑定离屏上下文的同类实例作画，主实例始终面向主画布
 export class FloorRenderer {
@@ -19,7 +19,6 @@ export class FloorRenderer {
   private width: number = 0;
   private height: number = 0;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
   // 静态场景离屏缓存：内容只依赖常量与画布尺寸，与游戏状态无关
   private floorCache: HTMLCanvasElement | null = null;
 
@@ -65,8 +64,8 @@ export class FloorRenderer {
         const roomRows = ROOM_ROWS[index];
         const roomWidth = roomCols * this.cellSize;
         const roomHeight = roomRows * this.cellSize;
-        const ox = this.gridOffset.x + origin.x * this.cellSize;
-        const oy = this.gridOffset.y + origin.y * this.cellSize;
+        const ox = origin.x * this.cellSize;
+        const oy = origin.y * this.cellSize;
         const outline = ROOM_OUTLINES[index % ROOM_OUTLINES.length];
         const [gapRight, gapLeft] = ROOM_DOOR_GAP;
 
@@ -108,28 +107,26 @@ export class FloorRenderer {
     this.ctx.restore();
   }
 
-  // 房间之外的公共走廊地面（同一楼层的室内走廊）：按 60px 建筑模数铺方形水磨石地砖，与房间共用同一网格原点
+  // 房间之外的公共走廊地面（同一楼层的室内走廊）：按网格模数（GRID_CELL_SIZE）铺方形水磨石地砖，与房间共用同一网格原点
   // （砖缝 + 逐砖倒角/明暗抖动 + 骨料细点，少量砖做破损暗斑与裂纹），再叠旧污渍、拖拽划痕与顶灯光斑；
   // 只在离屏地板缓存构建时执行一次，随机量全部走 hash01，保证缓存重建时纹理稳定不闪变
   private drawFloorCorridor() {
     const w = this.width;
     const h = this.height;
     const cell = this.cellSize;
-    const ox = this.gridOffset.x;
-    const oy = this.gridOffset.y;
 
     // 砖缝底色：整块暗色，垫在每块地砖之下形成缝
     this.ctx.fillStyle = '#0d0d13';
     this.ctx.fillRect(0, 0, w, h);
 
-    // 方形水磨石地砖：自网格原点外扩铺满画布（房间区域随后被房间盖住）
+    // 方形水磨石地砖：自网格原点（画布左上角）外扩铺满画布（房间区域随后被房间盖住）
     const tileTones = ['#1c1c26', '#20202c', '#181823'];
-    const cols = Math.ceil((w - ox) / cell) + 1;
-    const rows = Math.ceil((h - oy) / cell) + 1;
+    const cols = Math.ceil(w / cell) + 1;
+    const rows = Math.ceil(h / cell) + 1;
     for (let r = -1; r <= rows; r++) {
       for (let c = -1; c <= cols; c++) {
-        const x = ox + c * cell;
-        const y = oy + r * cell;
+        const x = c * cell;
+        const y = r * cell;
         const tile = cell - 3; // 四周留 1.5px 砖缝
 
         // 逐砖取色调 + 明暗抖动：同色砖也不整片死板
@@ -186,26 +183,28 @@ export class FloorRenderer {
       this.ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
 
-    // 拖拽划痕：两个门前与幽灵入场门内外各留几组，像有东西在楼道里刨抓拖行过
-    this.drawClawMarks(195, 485, -0.25, 74, 101); // 左房门外
-    this.drawClawMarks(300, 508, 0.28, 62, 102);
-    this.drawClawMarks(500, 170, 1.3, 64, 103); // 两房之间的走廊
-    this.drawClawMarks(545, 330, 1.45, 58, 104);
-    this.drawClawMarks(745, 515, -0.3, 76, 105); // 右房门外
-    // 左下角入场门外：三组爪痕自门口爬向走廊，交代幽灵是从这扇门里出来的
-    this.drawClawMarks(186, 546, -0.32, 66, 107);
-    this.drawClawMarks(258, 522, -0.38, 58, 108);
+    // 拖拽划痕：两个门前与幽灵入场门内外各留几组，像有东西在楼道里刨抓拖行过。
+    // 以下装饰坐标（含裂纹/光斑）均为画布像素、与网格布局手工对齐：格子尺寸或原点改动时，
+    // 按格坐标 (px - 偏移) / 格宽 换算后同步重排，保持与门、入场门的相对位置
+    this.drawClawMarks(171, 411, -0.25, 74, 101); // 左房门外
+    this.drawClawMarks(258, 430, 0.28, 62, 102);
+    this.drawClawMarks(475, 148, 1.3, 64, 103); // 两房之间的走廊
+    this.drawClawMarks(513, 282, 1.45, 58, 104);
+    this.drawClawMarks(729, 436, -0.3, 76, 105); // 右房门外
+    // 左下角入场门外：爪痕自门口爬向走廊，交代幽灵是从这扇门里出来的
+    this.drawClawMarks(83, 552, -0.32, 66, 107);
+    this.drawClawMarks(143, 532, -0.38, 58, 108);
 
-    // 结构裂纹：底边附近几条长裂缝，旧楼地面年久开裂
-    this.drawGroundCrack(320, 585, -1.15, 95, 401);
-    this.drawGroundCrack(690, 590, -1.35, 80, 402);
-    this.drawGroundCrack(512, 420, 1.35, 70, 403);
+    // 结构裂纹：走廊下段几条长裂缝，旧楼地面年久开裂
+    this.drawGroundCrack(325, 494, -1.15, 95, 401);
+    this.drawGroundCrack(633, 498, -1.35, 80, 402);
+    this.drawGroundCrack(485, 357, 1.35, 70, 403);
 
     // 顶灯冷色光斑：楼道灯的微弱照明，给走廊一点室内照明感（位置固定，对应楼道灯位）
     const pools: Position[] = [
-      { x: 530, y: 120 }, { x: 530, y: 300 }, { x: 530, y: 445 },
-      { x: 240, y: 520 }, { x: 520, y: 545 }, { x: 780, y: 510 },
-      { x: 80, y: 520 }, { x: 920, y: 515 },
+      { x: 500, y: 107 }, { x: 500, y: 257 }, { x: 500, y: 378 },
+      { x: 258, y: 440 }, { x: 500, y: 461 }, { x: 708, y: 432 },
+      { x: 125, y: 440 }, { x: 825, y: 436 },
     ];
     pools.forEach((p) => {
       const r = 120 + hash01(p.x, p.y) * 60;

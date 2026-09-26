@@ -10,19 +10,22 @@ import { Position } from '../types';
 export const CANVAS_WIDTH = 1000;
 export const CANVAS_HEIGHT = 600;
 // 房间网格
-export const GRID_CELL_SIZE = 60;
-// 画布（CANVAS_WIDTH x CANVAS_HEIGHT）：左房间 7 格宽 + 2 格走廊 + 右房间 6 格宽共 15 格，水平居中（左右各留 50px）；
-// 纵向最高 7 格（420px），整体偏上，下方留出幽灵入场空间；
-// 上方留白加厚到 52px：墙体立面向后抬升后，房间北侧凸窗（轮廓 y=-0.3）的墙顶面仍完整落在画布内
-export const GRID_OFFSET: Position = { x: 50, y: 52 };
+export const GRID_CELL_SIZE = 50;
+// 世界网格 20 列 × 12 行（20×50 = 1000、12×50 = 600）：恰好铺满画布，网格原点即画布左上角。
+// 场景内容按行列排布：房间整体从第 1 行开始 —— 第 0 行留给墙体立面的抬升占位（北墙抬升 24px +
+// 砖身带半宽与顶缘高光等像素占位合计约 45px，北侧凸窗轮廓 y=-0.3 格 ≈ -15px 也落在这一行内）；
+// 左右各留 1 / 2 列走廊，房间下方 4 行是走廊与幽灵入场区（入场门贴在画布左下角，墙线世界 y = 11.6）。
+// 注意：墙体抬升、门板尺寸等像素常量不随格宽缩放，固定像素装修（FloorRenderer 装饰坐标、
+// GhostRenderer 入场门门洞等）需按格坐标 px / 格宽 同步重排
 // 每个房间独立的网格行列数（可建造范围：房间内 0 ~ COLS-1 / ROWS-1，按房间索引对应）
 // 左房间更宽（7 列 x 6 行），右房间更长（6 列 x 7 行）
 export const ROOM_COLS: number[] = [7, 6];
 export const ROOM_ROWS: number[] = [6, 7];
-// 两个独立房间的坐标原点，右房间与左房间相隔 2 格走廊（7 + 2 = 9）
+// 两个独立房间的坐标原点（房间整体自第 1 行起排布：第 0 行留给墙体立面的抬升占位）。
+// 房间各自靠向画布两侧：右房间与左房间相隔 4 格走廊（1 + 7 + 4 = 12）
 export const ROOM_ORIGINS: Position[] = [
-  { x: 0, y: 0 },
-  { x: 9, y: 0 },
+  { x: 1, y: 1 },
+  { x: 12, y: 1 },
 ];
 // 世界格坐标落在哪个房间（不在任何房间内返回 -1）：
 // 床与房门的对应关系、炮塔可建造判定、幽灵的出场位置都由它换算
@@ -31,12 +34,12 @@ export function roomIndexOf(pos: Position): number {
     pos.x >= origin.x && pos.x < origin.x + ROOM_COLS[i]
     && pos.y >= origin.y && pos.y < origin.y + ROOM_ROWS[i]);
 }
-// 左下角幽灵入场门（世界格坐标，门洞中线）：走廊南侧一段残墙上的门洞，门后就是地图之外的黑。
+// 左下角幽灵入场门（世界格坐标，门洞中线）：贴在画布左下角的一段残墙上的门洞，门后就是地图之外的黑。
 // 渲染层由它换算出整扇门的像素几何（残墙/门柱/门楣/门板/门槛），逻辑层不拿它做碰撞（门后走不通）
-export const GHOST_ENTRANCE_DOOR: Position = { x: 1.4, y: 8.8 };
+export const GHOST_ENTRANCE_DOOR: Position = { x: 0.8, y: 11.6 };
 // 幽灵破门出场的位置（格索引，与 Ghost.position 同坐标系）：正对门洞、门内一步 ——
 // 门洞中心的世界坐标即 GHOST_ENTRANCE_DOOR，格索引各减 0.5，再向北（-y）收 0.6 格
-export const GHOST_SPAWN_POSITION: Position = { x: 0.9, y: 7.7 };
+export const GHOST_SPAWN_POSITION: Position = { x: 0.3, y: 10.5 };
 // 回血站位（世界格索引，与 Ghost.position 同坐标系）：入场门洞内一步、横向正对门洞中线 ——
 // 门洞中线是世界坐标 GHOST_ENTRANCE_DOOR.x，格索引各减 0.5，再向北收 0.25 格让身体正好卡进门洞里。
 // 鬼缩进门洞后免伤：玩家唯一的补刀窗口是它掉头跑回去的那几秒（RETREATING）
@@ -93,9 +96,9 @@ export function wallLift(outline: Position[]): number[] {
 // ── 幽灵寻路参数（数值由墙面占位与门洞位置推出，与碰撞几何联动，故与地图几何同处） ──
 
 // 幽灵的进攻车道（世界格索引 y）：走廊南侧的空地，横向段在这一高度上走。
-// 房间南墙的墙面占位最南到世界 y ≈ 7.4（含抬升扫掠带），车道取 7.7（世界 y ≈ 8.2）留足余量，
-// 与出场位置齐平：幽灵钻出门洞后就在这条车道上横穿走廊，不会蹭到任何墙
-export const GHOST_LANE_Y = 7.7;
+// 房间南墙（世界 y = 8）的墙面占位最南到 y ≈ 8.4（含抬升扫掠带），车道取 8.7（世界 y ≈ 9.2）留足余量：
+// 幽灵从入场门出来后先收进这条车道再横穿走廊，不会蹭到任何墙
+export const GHOST_LANE_Y = 8.7;
 // 纵向段的对准阈值（格）：横向挪到距门洞中线这么近之后，才转为纵向逼近，
 // 纵向时幽灵会继续朝门洞中线收拢，最终正对门洞站定
 export const GHOST_LANE_ALIGN = 0.35;
@@ -146,14 +149,14 @@ const WALL_BANDS: Array<[Position, Position]> = (() => {
   return bands;
 })();
 
-// 玩家可活动边界,GRID_OFFSET是游戏窗口区相对整个画布
+// 玩家可活动边界（画布即网格，即网格四周各内缩一个贴边余量）
 // （导出供幽灵寻路的导航格网复用：网里只保留边界内的节点，走到格网边缘实走时也不会被边界卡住）
 const PLAYER_EDGE_MARGIN = 0.4; // 向内预留一个角色贴边余量
 export const PLAYER_BOUNDS = {
-  minX: -GRID_OFFSET.x / GRID_CELL_SIZE + PLAYER_EDGE_MARGIN,
-  maxX: (CANVAS_WIDTH - GRID_OFFSET.x) / GRID_CELL_SIZE - PLAYER_EDGE_MARGIN,
-  minY: -GRID_OFFSET.y / GRID_CELL_SIZE + PLAYER_EDGE_MARGIN,
-  maxY: (CANVAS_HEIGHT - GRID_OFFSET.y) / GRID_CELL_SIZE - PLAYER_EDGE_MARGIN,
+  minX: PLAYER_EDGE_MARGIN,
+  maxX: CANVAS_WIDTH / GRID_CELL_SIZE - PLAYER_EDGE_MARGIN,
+  minY: PLAYER_EDGE_MARGIN,
+  maxY: CANVAS_HEIGHT / GRID_CELL_SIZE - PLAYER_EDGE_MARGIN,
 };
 
 // 点到线段的最短距离（世界格坐标）

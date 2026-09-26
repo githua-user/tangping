@@ -35,8 +35,8 @@ export class Renderer {
     this.ghostRenderer = new GhostRenderer(this.ctx, this.spawn);
     this.turretRenderer = new TurretRenderer(this.ctx);
   }
+  
   // nowMs：引擎游戏时钟（GameLogic.getClockMs）。子弹/特效插值必须与引擎写入 startTime 时使用同一时钟，
-  // 否则位置与命中结算会基准错位
   public render(state: GameState, nowMs: number) {
     this.clear();
     this.effects.updateGoldTexts(state, nowMs); // 金币增量检测：新入账时在玩家（睡觉即床中心）上方生成飘字

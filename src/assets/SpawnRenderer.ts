@@ -1,5 +1,5 @@
 import { GameState, Position, Door, BED_MAX_LEVEL, DOOR_MAX_LEVEL } from '../types';
-import { GHOST_ATTACK_OFFSET_Y, GRID_CELL_SIZE, GRID_OFFSET, ROOM_ORIGINS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, WALL_LEAN_FRONT, roomIndexOf } from '../utils/Collision';
+import { GHOST_ATTACK_OFFSET_Y, GRID_CELL_SIZE, ROOM_ORIGINS, ROOM_OUTLINES, ROOM_DOOR_GAP, WALL_BODY_WIDTH, WALL_LEAN_FRONT, roomIndexOf } from '../utils/Coordinate';
 // hash01：确定性哈希（FloorRenderer 导出），门面木纹/残段锯齿/木屑等扰动共用
 import { hash01 } from './FloorRenderer';
 
@@ -65,7 +65,6 @@ export interface DoorGeometry {
 export class SpawnRenderer {
   private ctx: CanvasRenderingContext2D;
   private cellSize: number = GRID_CELL_SIZE; // 单个网格单元格的像素边长
-  private gridOffset: Position = GRID_OFFSET; // 网格原点相对画布左上角的偏移（用于把场地居中）
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -139,8 +138,8 @@ export class SpawnRenderer {
     const origin = ROOM_ORIGINS[roomIndex];
     const outline = ROOM_OUTLINES[roomIndex % ROOM_OUTLINES.length];
     const [gapRight, gapLeft] = ROOM_DOOR_GAP;
-    const ox = this.gridOffset.x + origin.x * this.cellSize;
-    const oy = this.gridOffset.y + origin.y * this.cellSize;
+    const ox = origin.x * this.cellSize;
+    const oy = origin.y * this.cellSize;
     const leftX = ox + outline[gapLeft].x * this.cellSize;
     const rightX = ox + outline[gapRight].x * this.cellSize;
     const wallY = oy + outline[gapLeft].y * this.cellSize; // 门洞两端同 y，即南墙墙线
@@ -606,8 +605,8 @@ export class SpawnRenderer {
   // 床铺：遍历 beds 数组，各自画在 position 所在格子（两个房间共两张）；外观按等级分 5 档
   public drawBeds(state: GameState) {
     state.beds.forEach((bed) => {
-    const bx = this.gridOffset.x + bed.position.x * this.cellSize + this.cellSize / 2;
-    const by = this.gridOffset.y + bed.position.y * this.cellSize + this.cellSize / 2;
+    const bx = bed.position.x * this.cellSize + this.cellSize / 2;
+    const by = bed.position.y * this.cellSize + this.cellSize / 2;
     // 等级封顶在 BED_MAX_LEVEL（床铺外观 5 档），超出部分统一按最高档绘制
     const level = Math.min(bed.level, BED_MAX_LEVEL);
 

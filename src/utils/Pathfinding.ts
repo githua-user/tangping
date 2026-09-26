@@ -2,10 +2,10 @@
 // 贴着墙角和门框跑 —— 直线扑过去会被墙挡下，落进 GameLogic.stepGhost 的试探改向里来回蹭。
 // 这里把「墙面占位 + 可活动边界」离散成一张静态导航格网，用 A* 规划绕墙路线，由 GameLogic 沿路线推进。
 // 坐标约定：入参出参与 Ghost.position / Player.position 同为格索引坐标（世界格坐标 = 位置 + 0.5），
-// 只有本模块内部换算成世界格坐标去问 Collision.collidesWithWall —— 与移动结算共用同一套墙面判定，
+// 只有本模块内部换算成世界格坐标去问 Coordinate.collidesWithWall —— 与移动结算共用同一套墙面判定，
 // 格网里连通的路线实走时一定走得通。
 import { Position } from '../types';
-import { PLAYER_BOUNDS, collidesWithWall } from './Collision';
+import { PLAYER_BOUNDS, collidesWithWall } from './Coordinate';
 
 // ── 导航格网 ────────────────────────────────────────────────────────────
 

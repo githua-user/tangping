@@ -1,24 +1,24 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { GameState, GameAction, Position, BED_LEVELS, DOOR_LEVELS, TURRET_LEVELS, TURRET_BUILD_COST, bedUpgradeCost, doorUpgradeCost, turretUpgradeCost, GHOST_BASE } from '../types';
-import { GHOST_SPAWN_POSITION, roomIndexOf } from '../utils/Collision';
+import { GHOST_SPAWN_POSITION, roomIndexOf } from '../utils/Coordinate';
 
 const getInitialState = (): GameState => ({
   player: {
     id: 'player-1',
-    position: { x: 7.5, y: 3 }, // 出生在两房间之间的走廊正中
+    position: { x: 9.5, y: 4 }, // 出生在两房间之间的走廊正中
     gold: 100, 
     speed: 3, 
   },
-  // 两个独立房间：左房间（宽 7x6）门 (3,5) / 床 (1,0)；右房间（长 6x7）门 (12,6) / 床 (12,3)。
+  // 两个独立房间（原点：左 (1,1) / 右 (12,1)，房间各靠向画布两侧）：左房间（宽 7x6）门 (4,6) / 床 (2,1)；右房间（长 6x7）门 (15,7) / 床 (15,4)。
   // 同房间的门与床互为对应关系：幽灵出场时按玩家所用的床锁定同房间的那扇门（见 GameLogic.trySpawnGhost）
   doors: [
-    { id: 'door-1', position: { x: 3, y: 5 }, health: DOOR_LEVELS[0].maxHealth, maxHealth: DOOR_LEVELS[0].maxHealth, level: 1, isBroken: false },
-    { id: 'door-2', position: { x: 12, y: 6 }, health: DOOR_LEVELS[0].maxHealth, maxHealth: DOOR_LEVELS[0].maxHealth, level: 1, isBroken: false },
+    { id: 'door-1', position: { x: 4, y: 6 }, health: DOOR_LEVELS[0].maxHealth, maxHealth: DOOR_LEVELS[0].maxHealth, level: 1, isBroken: false },
+    { id: 'door-2', position: { x: 15, y: 7 }, health: DOOR_LEVELS[0].maxHealth, maxHealth: DOOR_LEVELS[0].maxHealth, level: 1, isBroken: false },
   ],
   beds: [
     // 左房床铺靠房间左上角（床头贴北墙）：门口到房内深处的动线整条让开，进门一带留作建造空地
-    { id: 'bed-1', position: { x: 1, y: 0 }, level: 1, isSleeping: false },
-    { id: 'bed-2', position: { x: 12, y: 3 }, level: 1, isSleeping: false },
+    { id: 'bed-1', position: { x: 2, y: 1 }, level: 1, isSleeping: false },
+    { id: 'bed-2', position: { x: 15, y: 4 }, level: 1, isSleeping: false },
   ],
   // 幽灵：基础数值取自 GHOST_BASE（血量/啃门伤害/速度），此后随「活动时间」缓慢成长（见 GameLogic.updateGhostStats）
   ghost: {

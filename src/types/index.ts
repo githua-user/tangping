@@ -33,7 +33,7 @@ export interface Ghost {
   position: Position;
   attackPower: number;
   speed: number;
-  
+
   // 锁定的攻击目标门：出场时锁定为玩家床铺所在房间的那扇门。
   targetDoor: string | null;
   // DORMANT：玩家第一次上床睡觉前的潜伏态，藏在左下角入场门后，不移动、不结算任何伤害；
@@ -116,7 +116,7 @@ export const TURRET_BUILD_COST = TURRET_LEVELS[0].buildCost;
 export const BED_MAX_LEVEL = BED_LEVELS.length;
 export const DOOR_MAX_LEVEL = DOOR_LEVELS.length;
 export const TURRET_MAX_LEVEL = TURRET_LEVELS.length;
-// 升级价格查询（level 级 → level+1 级）：满级返回 null，UI 显示与 reducer 校验共用
+// 升级价格查询，满级返回 null
 export const bedUpgradeCost = (level: number): number | null => BED_LEVELS[level - 1]?.upgradeCost ?? null;
 export const doorUpgradeCost = (level: number): number | null => DOOR_LEVELS[level - 1]?.upgradeCost ?? null;
 export const turretUpgradeCost = (level: number): number | null => TURRET_LEVELS[level - 1]?.upgradeCost ?? null;
